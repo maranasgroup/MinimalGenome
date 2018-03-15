@@ -29,20 +29,20 @@ class MinGenome(object):
         print model.solution.f
         model.summary()
 
-        df_medium = pandas.read_excel(data_dir+'/medium.xls',sheetname="LB medium")
-        exchange_rxns = df_medium['Reaction No.'].tolist()
-        LBs = df_medium['LB'].tolist()
-        UBs = df_medium['UB'].tolist()
+        # df_medium = pandas.read_excel(data_dir+'/medium.xls',sheetname="LB medium")
+        # exchange_rxns = df_medium['Reaction No.'].tolist()
+        # LBs = df_medium['LB'].tolist()
+        # UBs = df_medium['UB'].tolist()
 
-        for idx,r in enumerate(exchange_rxns):
-            rxn = model.reactions.get_by_id(r)
-            rxn.lower_bound = LBs[idx]
-            rxn.upper_bound = UBs[idx]
+        # for idx,r in enumerate(exchange_rxns):
+        #     rxn = model.reactions.get_by_id(r)
+        #     rxn.lower_bound = LBs[idx]
+        #     rxn.upper_bound = UBs[idx]
 
-        model.optimize()
-        print model.solution.status
-        print model.solution.f
-        model.summary()
+        # model.optimize()
+        # print model.solution.status
+        # print model.solution.f
+        # model.summary()
         return model
     
     def modelCobra_change_GPR(self,data_dir,oldmodel_dir,
@@ -122,7 +122,7 @@ class MinGenome(object):
             reg_genes = reg_genes[0].tolist()
 
         ############# parameters ################################       
-        df = pandas.read_excel(parameters_f)
+        df = pandas.read_excel(parameters_f,sheetname='all_clear_v2')
 
         test_all_genes = df["gene_or_promoter"].tolist()
         not_shared = []
@@ -340,25 +340,29 @@ class MinGenome(object):
             v[r.id].lowBound = r.lower_bound
             v[r.id].upBound = r.upper_bound
 
-        r_biomass = 'bio00006'
-        v[r_biomass].lowBound = mu
+        # r_biomass = 'bio00006'
+        # v[r_biomass].lowBound = mu
         # lp_prob += v["bio00127_norm"] + v["bio00127b_norm"] >= mu 
-        # v['BIOMASS_Ec_iJO1366_WT_53p95M'].lowBound = mu
+        v['BIOMASS_Ec_iJO1366_WT_53p95M'].lowBound = mu
 
-        # v['BIOMASS_Ec_iJO1366_core_53p95M'].lowBound = 0
-        # v['BIOMASS_Ec_iJO1366_core_53p95M'].upBound = 0
+        v['BIOMASS_Ec_iJO1366_core_53p95M'].lowBound = 0
+        v['BIOMASS_Ec_iJO1366_core_53p95M'].upBound = 0
 
         # lp file is somtime too larget to write
         # lp_prob.writeLP(lpfilename)
 
-
+        # orignial implementation in the paper was calling cplex from C++ directly
         # call eternal compled cpp excutable to solve is a better option
+        # it is implemented in codebase/mingenome_ecoli.cpp
+
+        # current test version of using python to call the optimization
         # options = [epgap, epagap, epint, epopt, eprhs]
-        GUROBI_CMD_OPTIONS = [('Threads', 8), ('TimeLimit', 1800),
-                          ('MIPGapAbs', 1e-9), ('MIPGap', 1e-9), ('CliqueCuts', 2)]
+        GUROBI_CMD_OPTIONS = [('Threads', 8), ('TimeLimit', 1800), ('FeasibilityTol',1E-9),
+                          ('OptimalityTol',1E-9),('IntFeasTol',1E-9),
+                          ('MIPGapAbs', 0), ('MIPGap', 0), ('CliqueCuts', 2)]
         pulp_solver = pulp.solvers.GUROBI_CMD(path=None, keepFiles=0, mip=1, msg=0,
                                 options=GUROBI_CMD_OPTIONS)
-        # pulp_solver = pulp.solvers.CPLEX_CMD(path=None, keepFiles=0, mip=1,\
+        # pulp_solver = pulp.solvers.CPLEX(path=None, keepFiles=0, mip=1,\
         #     msg=1, options=['mip tolerances mipgap 0', \
         #     'mip tolerances absmipgap 0', 'mip tolerances integrality 0',\
         #     'simplex tolerances optimality 1E-9',\
@@ -374,13 +378,17 @@ class MinGenome(object):
             for v in lp_prob.variables():
                 if "x_u_G_" in v.name and v.varValue == 1:
                     xname = v.name.replace("x_","")
-                    xname = xname.replace("J2_","J2-")
+                    # xname = xname.replace("J2_","J2-")
+                    xname = xname.replace("PM0_","PM0-")
+                    xname = xname.replace("PM_","PM-")
                     lp_prob += x[xname] == 1
                     if xname not in x_list: 
                         x_list.append(xname)
                 if "y_u_G_" in v.name and v.varValue == 1:
                     yname = v.name.replace("y_","")
-                    yname = yname.replace("J2_","J2-")
+                    # yname = yname.replace("J2_","J2-")
+                    yname = yname.replace("PM0_","PM0-")
+                    yname = yname.replace("PM_","PM-")
                     lp_prob += y[yname] == 1
                     if yname not in y_list: 
                         y_list.append(yname)
@@ -389,7 +397,7 @@ class MinGenome(object):
             lp_prob.constraints['end'].changeRHS(rhs)
             return lp_prob
         
-        for iter_count in xrange(1,200):
+        for iter_count in xrange(1,12):
             lp_prob = iterate_solve(lp_prob,iter_count)
         pandas.DataFrame({'start': x_list, 'end':y_list,'status':status}).to_csv("./out/local_result_essential.csv")
         # pdb.set_trace()
